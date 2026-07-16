@@ -124,7 +124,7 @@ public struct CharacteristicProtocol: Sendable {
         try await pairingStore.remove(controllerIdentifier: identifier)
 
         let stillPaired = await pairingStore.isPaired
-        logger.info("POST /pairings: pairing removed. Still paired: \(stillPaired)")
+        logger.debug("POST /pairings: pairing removed. Still paired: \(stillPaired)")
         await onPairingChange?()
 
         return HTTPProtocol.okResponse(

@@ -248,7 +248,7 @@ public final class AppleTCPServer: HAPServer, @unchecked Sendable {
                     self.logger.error("HAP listener failed: \(error)")
                     box.resume(throwing: error)
                 case .cancelled:
-                    self.logger.info("HAP listener cancelled")
+                    self.logger.debug("HAP listener cancelled")
                     box.resume(throwing: HAPError.unavailable)
                 default:
                     break
@@ -296,7 +296,7 @@ public final class AppleTCPServer: HAPServer, @unchecked Sendable {
             return id
         }
 
-        logger.info("New HAP connection \(connectionID)")
+        logger.debug("New HAP connection \(connectionID)")
 
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
