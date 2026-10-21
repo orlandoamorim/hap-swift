@@ -30,6 +30,29 @@ struct HAPSessionTests {
         #expect(buffer.isEmpty)
     }
 
+    @Test("payloads over 1024 bytes are split into frames")
+    func largePayloadIsFramed() async throws {
+        let readKey = SymmetricKey(size: .bits256)
+        let writeKey = SymmetricKey(size: .bits256)
+        let session = HAPSession()
+        await session.establishSession(readKey: writeKey, writeKey: readKey)
+        let remote = HAPSession()
+        await remote.establishSession(readKey: readKey, writeKey: writeKey)
+
+        let plaintext = Data((0 ..< 100_000).map { UInt8(truncatingIfNeeded: $0) })
+        var buffer = try await remote.encrypt(plaintext)
+        var received = Data()
+        var frames = 0
+        while let chunk = try await session.decryptFrame(from: &buffer) {
+            #expect(chunk.count <= 1024)
+            received.append(chunk)
+            frames += 1
+        }
+        #expect(received == plaintext)
+        #expect(frames == 98)
+        #expect(buffer.isEmpty)
+    }
+
     @Test("frame format — 2-byte LE PLAINTEXT length + AAD (HAP spec §5.5.5)")
     func frameFormat() async throws {
         let session = HAPSession()

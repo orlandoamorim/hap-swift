@@ -34,7 +34,23 @@ public actor HAPSession {
     /// ```
     /// The 2-byte length header is used as the AAD (additional authenticated data) for
     /// ChaCha20-Poly1305, so it is integrity-protected alongside the ciphertext.
+    /// Payloads longer than 1024 bytes (HAP's maximum frame size) are split into
+    /// consecutive frames, each with its own counter.
     public func encrypt(_ plaintext: Data) throws -> Data {
+        guard plaintext.count > Self.maxFrameLength else { return try encryptFrame(plaintext) }
+        var frames = Data()
+        var offset = plaintext.startIndex
+        while offset < plaintext.endIndex {
+            let end = min(offset + Self.maxFrameLength, plaintext.endIndex)
+            frames.append(try encryptFrame(plaintext[offset ..< end]))
+            offset = end
+        }
+        return frames
+    }
+
+    static let maxFrameLength = 1024
+
+    private func encryptFrame(_ plaintext: Data) throws -> Data {
         guard let writeKey else { throw HAPCryptoError.encryptionFailed }
 
         // Build 2-byte LE PLAINTEXT length — this is both the frame header and the AAD.
