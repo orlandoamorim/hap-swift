@@ -128,6 +128,35 @@ public actor HAPBridge {
         self.accessories[1] = bridge
     }
 
+    // MARK: - Standalone accessory
+
+    /// Adds services to AID 1, for a standalone (non-bridge) accessory such as an
+    /// IP camera, which HomeKit hubs don't stream from behind a bridge.
+    /// Returns the services with their assigned IIDs.
+    @discardableResult
+    public func addPrimaryServices(_ services: [HAPService]) -> [HAPService] {
+        guard var primary = accessories[1] else { return [] }
+        var nextIID = (primary.services.flatMap { [$0.iid] + $0.characteristics.map(\.iid) }.max() ?? 0) + 1
+        var added: [HAPService] = []
+        for service in services {
+            let serviceIID = nextIID
+            nextIID += 1
+            var chars: [HAPCharacteristic] = []
+            for char in service.characteristics {
+                chars.append(HAPCharacteristic(
+                    iid: nextIID, type: char.type, value: char.value, permissions: char.permissions,
+                    format: char.format, minValue: char.minValue, maxValue: char.maxValue,
+                    minStep: char.minStep, unit: char.unit, validValues: char.validValues
+                ))
+                nextIID += 1
+            }
+            added.append(HAPService(iid: serviceIID, type: service.type, characteristics: chars))
+        }
+        primary.services += added
+        accessories[1] = primary
+        return added
+    }
+
     // MARK: - Accessory Management
 
     /// Add an accessory to the bridge.

@@ -14,5 +14,6 @@ public enum HAPCategory: UInt8, Sendable {
     case securitySystem = 11
     case windowCovering = 14
     case programmableSwitch = 15
+    case ipCamera = 17
     case speaker = 26
 }

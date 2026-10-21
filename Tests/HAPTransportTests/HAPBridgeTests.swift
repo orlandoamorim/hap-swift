@@ -129,4 +129,18 @@ struct HAPBridgeTests {
         await bridge.removeAccessory(aid: aid)
         #expect(try await bridge.resource(aid: aid, width: 1, height: 1) == nil)
     }
+
+    @Test("primary services go on AID 1 after the existing ones")
+    func primaryServices() async {
+        let bridge = HAPBridge(info: AccessoryInfo(name: "Cam", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+                               category: .ipCamera)
+        let before = await bridge.accessoryDatabase()[0].services.flatMap { [$0.iid] + $0.characteristics.map(\.iid) }.max()!
+        let added = await bridge.addPrimaryServices([.switch(startIID: 0), .switch(startIID: 0)])
+        #expect(added.map(\.iid) == [before + 1, before + 3])
+        #expect(added[1].characteristics[0].iid == before + 4)
+        let db = await bridge.accessoryDatabase()
+        #expect(db.count == 1)
+        #expect(db[0].services.filter { $0.type == .switch }.count == 2)
+        #expect(await bridge.category == .ipCamera)
+    }
 }
