@@ -114,4 +114,56 @@ struct PairingStateMachineTests {
         let errorItem = items.first(where: { $0.type == TLV8Type.error.rawValue })
         #expect(errorItem != nil)
     }
+
+    @Test("M1 is refused with Unavailable once a controller is paired")
+    func m1RefusedWhenPaired() async throws {
+        let store = InMemoryPairingStore()
+        await store.store(controllerIdentifier: "controller", publicKey: Data(repeating: 1, count: 32))
+        let sm = PairingStateMachine(
+            setupCode: "031-45-154", identity: HAPIdentity(), pairingStore: store,
+            deviceID: "AA:BB:CC:DD:EE:FF", attempts: PairSetupAttempts()
+        )
+        let m1 = TLV8.encode([
+            (type: TLV8Type.state.rawValue, value: Data([0x01])),
+            (type: TLV8Type.method.rawValue, value: Data([0x00])),
+        ])
+        let items = try TLV8.decode(try await sm.handleRequest(m1))
+        #expect(items.first(where: { $0.type == TLV8Type.error.rawValue })?.value == Data([TLV8ErrorCode.unavailable.rawValue]))
+        #expect(items.first(where: { $0.type == TLV8Type.publicKey.rawValue }) == nil)
+    }
+
+    @Test("M1 is refused with MaxTries after too many failed attempts")
+    func m1RefusedAfterMaxTries() async throws {
+        let attempts = PairSetupAttempts()
+        for _ in 0..<PairSetupAttempts.limit { await attempts.recordFailure() }
+        let sm = PairingStateMachine(
+            setupCode: "031-45-154", identity: HAPIdentity(), pairingStore: InMemoryPairingStore(),
+            deviceID: "AA:BB:CC:DD:EE:FF", attempts: attempts
+        )
+        let m1 = TLV8.encode([
+            (type: TLV8Type.state.rawValue, value: Data([0x01])),
+            (type: TLV8Type.method.rawValue, value: Data([0x00])),
+        ])
+        let items = try TLV8.decode(try await sm.handleRequest(m1))
+        #expect(items.first(where: { $0.type == TLV8Type.error.rawValue })?.value == Data([TLV8ErrorCode.maxTries.rawValue]))
+    }
+
+    @Test("a rejected proof counts as a failed attempt")
+    func rejectedProofCounts() async throws {
+        let attempts = PairSetupAttempts()
+        let sm = PairingStateMachine(
+            setupCode: "031-45-154", identity: HAPIdentity(), pairingStore: InMemoryPairingStore(),
+            deviceID: "AA:BB:CC:DD:EE:FF", attempts: attempts
+        )
+        _ = try await sm.handleRequest(TLV8.encode([
+            (type: TLV8Type.state.rawValue, value: Data([0x01])),
+            (type: TLV8Type.method.rawValue, value: Data([0x00])),
+        ]))
+        _ = try await sm.handleRequest(TLV8.encode([
+            (type: TLV8Type.state.rawValue, value: Data([0x03])),
+            (type: TLV8Type.publicKey.rawValue, value: Data(repeating: 2, count: 384)),
+            (type: TLV8Type.proof.rawValue, value: Data(repeating: 3, count: 64)),
+        ]))
+        #expect(await attempts.failures == 1)
+    }
 }

@@ -6,6 +6,23 @@ import Logging
 import HAPCore
 import HAPCrypto
 
+// MARK: - PairSetupAttempts
+
+/// Failed pair-setup attempts, shared by every connection of an accessory.
+/// HAP requires refusing pair-setup with kTLVError_MaxTries after 100 failures.
+public actor PairSetupAttempts {
+    public static let shared = PairSetupAttempts()
+    public static let limit = 100
+
+    public private(set) var failures = 0
+
+    public init() {}
+
+    var isExhausted: Bool { failures >= Self.limit }
+    func recordFailure() { failures += 1 }
+    func reset() { failures = 0 }
+}
+
 // MARK: - PairingStateMachine
 
 public actor PairingStateMachine {
@@ -13,6 +30,7 @@ public actor PairingStateMachine {
     private let identity: HAPIdentity
     private let pairingStore: any PairingStore
     private let deviceID: String
+    private let attempts: PairSetupAttempts
     private var state: State = .idle
     private let logger = Logger(label: "hap.pairing")
 
@@ -34,7 +52,10 @@ public actor PairingStateMachine {
         }
     }
 
-    public init(setupCode: String, identity: HAPIdentity, pairingStore: any PairingStore, deviceID: String) {
+    public init(
+        setupCode: String, identity: HAPIdentity, pairingStore: any PairingStore, deviceID: String,
+        attempts: PairSetupAttempts = .shared
+    ) {
         // HAP SRP uses the setup code in its display format (XXX-XX-XXX) including
         // dashes as the SRP password. All reference implementations (hap-nodejs,
         // HAP-python, esp-homekit) pass the formatted string with dashes to SRP.
@@ -42,6 +63,7 @@ public actor PairingStateMachine {
         self.identity = identity
         self.pairingStore = pairingStore
         self.deviceID = deviceID
+        self.attempts = attempts
     }
 
     public func handleRequest(_ data: Data) async throws -> Data {
@@ -64,8 +86,8 @@ public actor PairingStateMachine {
         logger.debug("handleRequest: iOS state=\(stateValue)")
 
         switch stateValue {
-        case 1: return try handleM1(items)
-        case 3: return try handleM3(items)
+        case 1: return try await handleM1(items)
+        case 3: return try await handleM3(items)
         case 5: return try await handleM5(items)
         default:
             logger.error("handleRequest: unrecognised state value \(stateValue)")
@@ -75,12 +97,23 @@ public actor PairingStateMachine {
 
     // MARK: - M1 → M2
 
-    private func handleM1(_ items: [TLV8.Item]) throws -> Data {
+    private func handleM1(_ items: [TLV8.Item]) async throws -> Data {
         logger.debug("M1: received (state=\(state.name))")
 
         guard case .idle = state else {
             logger.warning("M1: wrong state — returning error (state=\(state.name))")
             return errorResponse(state: 2, error: .unknown)
+        }
+
+        // An accessory that already has a controller only takes new pairings through
+        // an admin's verified session (POST /pairings), never through the setup code.
+        if await pairingStore.isPaired {
+            logger.warning("M1: already paired — refusing pair-setup")
+            return errorResponse(state: 2, error: .unavailable)
+        }
+        if await attempts.isExhausted {
+            logger.warning("M1: too many failed attempts — refusing pair-setup")
+            return errorResponse(state: 2, error: .maxTries)
         }
 
         // Verify method is pair-setup (0x00)
@@ -104,7 +137,7 @@ public actor PairingStateMachine {
 
     // MARK: - M3 → M4
 
-    private func handleM3(_ items: [TLV8.Item]) throws -> Data {
+    private func handleM3(_ items: [TLV8.Item]) async throws -> Data {
         logger.debug("M3: received (state=\(state.name))")
 
         guard case .awaitingM3(let server) = state else {
@@ -136,6 +169,7 @@ public actor PairingStateMachine {
             ])
         } catch {
             logger.error("M3: proof REJECTED — \(error)")
+            await attempts.recordFailure()
             self.state = .error
             return errorResponse(state: 4, error: .authentication)
         }
@@ -229,6 +263,7 @@ public actor PairingStateMachine {
         // Store controller pairing
         let identifierString = String(data: controllerIdentifier, encoding: .utf8) ?? controllerIdentifier.hexString
         try await pairingStore.store(controllerIdentifier: identifierString, publicKey: controllerPublicKey)
+        await attempts.reset()
 
         // Build M6 response
         // Derive AccessoryX for signature
