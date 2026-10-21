@@ -1,5 +1,14 @@
 # hap-swift
 
+> **Fork notice.** This is a modified fork of [acumen-dev/hap-swift](https://github.com/acumen-dev/hap-swift), maintained for [TowerHub](https://github.com/orlandoamorim/TowerHub). The `feat/resource-endpoint` branch changes the original in these files (Apache-2.0, section 4(b)):
+>
+> - `Sources/HAPTransport/HAPSession.swift`, `HAPBridge.swift`, `CharacteristicProtocol.swift`: `POST /resource` for camera snapshots, encrypted responses split into 1024-byte HAP frames, and standalone accessories on AID 1.
+> - `Sources/HAPCore/HAPCategory.swift`, `HAPCharacteristicType+Extended.swift`, `HAPServiceType+Extended.swift`: IP camera category and camera service and characteristic types.
+> - `Sources/HAPApple/AppleTCPServer.swift`: logs the remote endpoint of new connections.
+> - Tests for the above in `Tests/HAPTransportTests`.
+>
+> All changes are licensed under Apache-2.0, like the original.
+
 A native Swift implementation of the [HomeKit Accessory Protocol (HAP)](https://developer.apple.com/homekit/) — the TCP-based protocol Apple Home uses for SecuritySystem, GarageDoorOpener, and other device types that Matter does not support.
 
 ## Overview
