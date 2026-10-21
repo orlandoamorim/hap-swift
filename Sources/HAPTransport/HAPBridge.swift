@@ -12,6 +12,7 @@ public actor HAPBridge {
     private var accessories: [UInt64: HAPAccessory] = [:]
     private var nextAID: UInt64 = 2
     private var writeHandlers: [String: @Sendable (HAPCharacteristicValue) async throws -> Void] = [:]
+    private var resourceHandlers: [UInt64: ResourceHandler] = [:]
     public let category: HAPCategory
 
     // MARK: - Configuration number (c#)
@@ -216,6 +217,7 @@ public actor HAPBridge {
         // Clean up write handlers for this accessory
         let aidPrefix = "\(aid)."
         writeHandlers = writeHandlers.filter { !$0.key.hasPrefix(aidPrefix) }
+        resourceHandlers[aid] = nil
 
         // Clean up event subscriptions for this accessory
         subscriptions = subscriptions.filter { !$0.key.hasPrefix(aidPrefix) }
@@ -281,6 +283,22 @@ public actor HAPBridge {
         handler: @escaping @Sendable (HAPCharacteristicValue) async throws -> Void
     ) {
         writeHandlers[Self.handlerKey(aid: aid, iid: iid)] = handler
+    }
+
+    // MARK: - Resources (camera snapshots)
+
+    /// Produces a JPEG snapshot for `POST /resource`, given the requested size.
+    public typealias ResourceHandler = @Sendable (_ width: Int, _ height: Int) async throws -> Data
+
+    /// Registers the snapshot source of a camera accessory.
+    public func registerResourceHandler(aid: UInt64, handler: @escaping ResourceHandler) {
+        resourceHandlers[aid] = handler
+    }
+
+    /// Snapshot for `aid`; `nil` when the accessory has no resource handler.
+    public func resource(aid: UInt64, width: Int, height: Int) async throws -> Data? {
+        guard let handler = resourceHandlers[aid] else { return nil }
+        return try await handler(width, height)
     }
 
     // MARK: - Characteristic Updates

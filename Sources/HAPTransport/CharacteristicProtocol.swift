@@ -53,6 +53,8 @@ public struct CharacteristicProtocol: Sendable {
             return try await handlePutCharacteristics(request)
         case ("PUT", "/prepare"):
             return try handlePrepare(request)
+        case ("POST", "/resource"):
+            return try await handleResource(request)
         default:
             logger.warning("Unhandled request: \(request.method) \(request.path)")
             return HTTPProtocol.errorResponse(status: 404, message: "Not Found")
@@ -268,6 +270,29 @@ public struct CharacteristicProtocol: Sendable {
         }
 
         return HTTPProtocol.noContentResponse()
+    }
+
+    // MARK: - POST /resource
+
+    /// Camera snapshot: `{"aid": 2, "resource-type": "image", "image-width": 640, "image-height": 360}`.
+    /// `aid` is absent for a standalone camera accessory, which is always AID 1.
+    private func handleResource(_ request: HTTPRequest) async throws -> HTTPResponse {
+        guard let json = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
+              json["resource-type"] as? String == "image" else {
+            return HTTPProtocol.errorResponse(status: 400, message: "Bad Request")
+        }
+        let aid = (json["aid"] as? NSNumber)?.uint64Value ?? 1
+        let width = (json["image-width"] as? NSNumber)?.intValue ?? 640
+        let height = (json["image-height"] as? NSNumber)?.intValue ?? 360
+        do {
+            guard let jpeg = try await bridge.resource(aid: aid, width: width, height: height) else {
+                return HTTPProtocol.errorResponse(status: 404, message: "Not Found")
+            }
+            return HTTPProtocol.okResponse(body: jpeg, contentType: "image/jpeg")
+        } catch {
+            logger.warning("POST /resource: aid=\(aid) failed: \(error)")
+            return HTTPProtocol.errorResponse(status: 500, message: "Internal Server Error")
+        }
     }
 
     // MARK: - JSON Encoding

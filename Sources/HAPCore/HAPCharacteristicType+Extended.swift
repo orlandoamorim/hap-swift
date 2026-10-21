@@ -69,6 +69,17 @@ extension HAPCharacteristicType {
     public static let volume = HAPCharacteristicType(rawValue: "119")
 }
 
+// MARK: - Camera
+
+extension HAPCharacteristicType {
+    public static let supportedVideoStreamConfiguration = HAPCharacteristicType(rawValue: "114")
+    public static let supportedAudioStreamConfiguration = HAPCharacteristicType(rawValue: "115")
+    public static let supportedRTPConfiguration = HAPCharacteristicType(rawValue: "116")
+    public static let selectedRTPStreamConfiguration = HAPCharacteristicType(rawValue: "117")
+    public static let setupEndpoints = HAPCharacteristicType(rawValue: "118")
+    public static let streamingStatus = HAPCharacteristicType(rawValue: "120")
+}
+
 // MARK: - Shared
 
 extension HAPCharacteristicType {

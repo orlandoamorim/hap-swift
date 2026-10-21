@@ -40,4 +40,6 @@ extension HAPServiceType {
 
 extension HAPServiceType {
     public static let speaker = HAPServiceType(rawValue: "113")
+    public static let cameraRTPStreamManagement = HAPServiceType(rawValue: "110")
+    public static let microphone = HAPServiceType(rawValue: "112")
 }

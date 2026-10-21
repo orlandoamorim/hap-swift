@@ -114,4 +114,19 @@ struct HAPBridgeTests {
         let written = await bridge.readCharacteristic(aid: aid, iid: targetChar.iid)
         #expect(written == .uint8(1))
     }
+
+    @Test("resource handler serves snapshots per accessory and is removed with it")
+    func resourceHandler() async throws {
+        let bridge = makeBridge()
+        let aid = await bridge.addAccessory(
+            info: AccessoryInfo(name: "Cam", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+            services: [.switch(startIID: 0)]
+        )
+        await bridge.registerResourceHandler(aid: aid) { width, height in Data("\(width)x\(height)".utf8) }
+        let jpeg = try await bridge.resource(aid: aid, width: 640, height: 360)
+        #expect(jpeg == Data("640x360".utf8))
+        #expect(try await bridge.resource(aid: 99, width: 1, height: 1) == nil)
+        await bridge.removeAccessory(aid: aid)
+        #expect(try await bridge.resource(aid: aid, width: 1, height: 1) == nil)
+    }
 }
