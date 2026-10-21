@@ -296,7 +296,7 @@ public final class AppleTCPServer: HAPServer, @unchecked Sendable {
             return id
         }
 
-        logger.debug("New HAP connection \(connectionID)")
+        logger.debug("New HAP connection \(connectionID) from \(connection.endpoint.debugDescription)")
 
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
