@@ -397,6 +397,19 @@ public actor HAPBridge {
     }
 
     /// Remove all subscriptions for a disconnected connection.
+    // MARK: - Session secrets (HomeKit Data Stream)
+
+    /// Pair-verify shared secret of each verified connection.
+    private var sessionSecrets: [Int: Data] = [:]
+
+    public func setSessionSecret(_ secret: Data?, connectionID: Int) {
+        sessionSecrets[connectionID] = secret
+    }
+
+    public func sessionSecret(connectionID: Int) -> Data? {
+        sessionSecrets[connectionID]
+    }
+
     public func unsubscribeAll(connectionID: Int) {
         for key in subscriptions.keys {
             subscriptions[key]?.remove(connectionID)

@@ -21,6 +21,7 @@ private actor HAPConnectionContext {
     let charProtocol: CharacteristicProtocol
     let pairVerifyStateMachine: PairVerifyStateMachine
     let connectionID: Int
+    let bridge: HAPBridge
     init(
         bridge: HAPBridge,
         setupCode: String,
@@ -31,6 +32,7 @@ private actor HAPConnectionContext {
         onPairingChange: (@Sendable () async -> Void)? = nil
     ) {
         self.connectionID = connectionID
+        self.bridge = bridge
         let pairing = PairingStateMachine(
             setupCode: setupCode, identity: identity, pairingStore: pairingStore, deviceID: deviceID
         )
@@ -144,6 +146,7 @@ private actor HAPConnectionContext {
                 // to encrypted mode.  All subsequent data from iOS will be encrypted.
                 if let keys = await pairVerifyStateMachine.sessionKeys() {
                     await session.establishSession(readKey: keys.readKey, writeKey: keys.writeKey)
+                    await bridge.setSessionSecret(await pairVerifyStateMachine.sharedSecret(), connectionID: connectionID)
                     logger.info("Connection \(connectionID): session encryption established")
                 }
             }
@@ -362,6 +365,7 @@ public final class AppleTCPServer: HAPServer, @unchecked Sendable {
         // Clean up event subscriptions for this connection
         Task {
             await bridge.unsubscribeAll(connectionID: connectionID)
+            await bridge.setSessionSecret(nil, connectionID: connectionID)
         }
     }
 
