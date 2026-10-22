@@ -239,6 +239,8 @@ public struct CharacteristicProtocol: Sendable {
 
         logger.debug("PUT /characteristics: \(characteristics.count) characteristic(s)")
 
+        // Write-response values ("r": true), answered with 207 Multi-Status.
+        var responses: [[String: Any]] = []
         for charDict in characteristics {
             guard let aid = charDict["aid"] as? UInt64 ?? (charDict["aid"] as? Int).map(UInt64.init),
                   let iid = charDict["iid"] as? UInt64 ?? (charDict["iid"] as? Int).map(UInt64.init) else {
@@ -260,7 +262,12 @@ public struct CharacteristicProtocol: Sendable {
                 let value = decodeValue(rawValue)
                 if let value {
                     logger.debug("PUT /characteristics: write aid=\(aid) iid=\(iid) value=\(value)")
-                    try await bridge.writeCharacteristic(aid: aid, iid: iid, value: value)
+                    let response = try await bridge.writeCharacteristic(aid: aid, iid: iid, value: value, connectionID: connectionID)
+                    if charDict["r"] as? Bool ?? (charDict["r"] as? Int).map({ $0 != 0 }) == true {
+                        var entry: [String: Any] = ["aid": aid, "iid": iid, "status": HAPStatus.success.rawValue]
+                        if let response { entry["value"] = encodeValue(response) }
+                        responses.append(entry)
+                    }
                 } else {
                     logger.warning("PUT /characteristics: aid=\(aid) iid=\(iid) could not decode value: \(rawValue) (type: \(type(of: rawValue)))")
                 }
@@ -269,7 +276,10 @@ public struct CharacteristicProtocol: Sendable {
             }
         }
 
-        return HTTPProtocol.noContentResponse()
+        guard !responses.isEmpty else { return HTTPProtocol.noContentResponse() }
+        let json = try JSONSerialization.data(withJSONObject: ["characteristics": responses])
+        return HTTPResponse(statusCode: 207, statusMessage: "Multi-Status",
+                            headers: [(name: "Content-Type", value: HTTPProtocol.hapJSON)], body: json)
     }
 
     // MARK: - POST /resource
@@ -324,11 +334,13 @@ public struct CharacteristicProtocol: Sendable {
                     charList.append(charDict)
                 }
 
-                serviceList.append([
+                var serviceDict: [String: Any] = [
                     "iid": service.iid,
                     "type": service.type.rawValue,
                     "characteristics": charList,
-                ])
+                ]
+                if !service.linked.isEmpty { serviceDict["linked"] = service.linked }
+                serviceList.append(serviceDict)
             }
 
             accessoryList.append([
