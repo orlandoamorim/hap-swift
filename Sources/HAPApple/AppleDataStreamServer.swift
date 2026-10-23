@@ -235,6 +235,7 @@ actor DataStreamConnection {
     private func stream(_ streamID: Int64) async {
         logger.info("HDS: recording stream \(streamID) opened")
         var sequence: Int64 = 0
+        var ended = false
         do {
             for try await packet in recording(streamID) {
                 sequence += 1
@@ -261,7 +262,12 @@ actor DataStreamConnection {
                     await send(DataStreamMessage(protocol: "dataSend", topic: "data", kind: .event, message: .dictionary(event)))
                     offset = end
                 } while offset < data.count
-                if last { break }
+                if last { ended = true; break }
+            }
+            // The source stopped early (its camera stream restarted): tell the controller.
+            if !ended, !Task.isCancelled {
+                await send(DataStreamMessage(protocol: "dataSend", topic: "close", kind: .event,
+                                             message: .dictionary(["streamId": .int(streamID), "reason": .int(0)])))
             }
         } catch {
             if !Task.isCancelled {
