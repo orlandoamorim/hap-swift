@@ -143,4 +143,34 @@ struct HAPBridgeTests {
         #expect(db[0].services.filter { $0.type == .switch }.count == 2)
         #expect(await bridge.category == .ipCamera)
     }
+
+    @Test("linked services are given as positions and stored as IIDs")
+    func linkedServices() async {
+        let bridge = makeBridge()
+        var recording = HAPService.switch(startIID: 0)
+        recording.linked = [1]
+        let aid = await bridge.addAccessory(
+            info: AccessoryInfo(name: "Cam", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+            services: [recording, .switch(startIID: 0)]
+        )
+        let services = await bridge.accessoryDatabase().first { $0.aid == aid }!.services
+        #expect(services[1].linked == [services[2].iid])
+        #expect(services[2].linked.isEmpty)
+    }
+
+    @Test("write-response handler answers with a value and the writing connection")
+    func writeResponse() async throws {
+        let bridge = makeBridge()
+        let aid = await bridge.addAccessory(
+            info: AccessoryInfo(name: "Cam", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+            services: [HAPService(type: .dataStreamTransportManagement, characteristics: [
+                HAPCharacteristic(iid: 0, type: .setupDataStreamTransport, value: .tlv8(Data()),
+                                  permissions: [.read, .write, .writeResponse], format: .tlv8),
+            ])]
+        )
+        let iid = await bridge.accessoryDatabase().first { $0.aid == aid }!.services[1].characteristics[0].iid
+        await bridge.registerWriteResponseHandler(aid: aid, iid: iid) { _, connectionID in .tlv8(Data([UInt8(connectionID)])) }
+        let response = try await bridge.writeCharacteristic(aid: aid, iid: iid, value: .tlv8(Data([1])), connectionID: 7)
+        #expect(response == .tlv8(Data([7])))
+    }
 }

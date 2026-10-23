@@ -17,7 +17,7 @@ public actor PairVerifyStateMachine {
     private enum State {
         case idle
         case awaitingM3(sharedSecret: Data, accessoryEphemeralPublicKey: Data, controllerEphemeralPublicKey: Data)
-        case verified(readKey: SymmetricKey, writeKey: SymmetricKey)
+        case verified(readKey: SymmetricKey, writeKey: SymmetricKey, sharedSecret: Data)
     }
 
     public init(identity: HAPIdentity, pairingStore: any PairingStore, deviceID: String) {
@@ -41,8 +41,14 @@ public actor PairVerifyStateMachine {
         }
     }
 
+    /// The pair-verify ECDH shared secret, from which HomeKit Data Stream keys are derived.
+    public func sharedSecret() -> Data? {
+        if case .verified(_, _, let secret) = state { return secret }
+        return nil
+    }
+
     public func sessionKeys() -> (readKey: SymmetricKey, writeKey: SymmetricKey)? {
-        if case .verified(let readKey, let writeKey) = state {
+        if case .verified(let readKey, let writeKey, _) = state {
             return (readKey: readKey, writeKey: writeKey)
         }
         return nil
@@ -167,7 +173,7 @@ public actor PairVerifyStateMachine {
         //   session.writeKey (outgoing data to encrypt) = Control-Read  = derived.readKey
         let derived = HAPKeyDerivation.deriveSessionKeys(from: sharedSecret)
 
-        self.state = .verified(readKey: derived.writeKey, writeKey: derived.readKey)
+        self.state = .verified(readKey: derived.writeKey, writeKey: derived.readKey, sharedSecret: sharedSecret)
 
         return TLV8.encode([
             (type: TLV8Type.state.rawValue, value: Data([0x04])),
