@@ -80,6 +80,22 @@ extension HAPCharacteristicType {
     public static let streamingStatus = HAPCharacteristicType(rawValue: "120")
 }
 
+// MARK: - Camera Recording (HomeKit Secure Video)
+
+extension HAPCharacteristicType {
+    public static let supportedCameraRecordingConfiguration = HAPCharacteristicType(rawValue: "205")
+    public static let supportedVideoRecordingConfiguration = HAPCharacteristicType(rawValue: "206")
+    public static let supportedAudioRecordingConfiguration = HAPCharacteristicType(rawValue: "207")
+    public static let selectedCameraRecordingConfiguration = HAPCharacteristicType(rawValue: "209")
+    public static let recordingAudioActive = HAPCharacteristicType(rawValue: "226")
+    public static let homeKitCameraActive = HAPCharacteristicType(rawValue: "21B")
+    public static let cameraOperatingModeIndicator = HAPCharacteristicType(rawValue: "21D")
+    public static let eventSnapshotsActive = HAPCharacteristicType(rawValue: "223")
+    public static let periodicSnapshotsActive = HAPCharacteristicType(rawValue: "225")
+    public static let supportedDataStreamTransportConfiguration = HAPCharacteristicType(rawValue: "130")
+    public static let setupDataStreamTransport = HAPCharacteristicType(rawValue: "131")
+}
+
 // MARK: - Shared
 
 extension HAPCharacteristicType {

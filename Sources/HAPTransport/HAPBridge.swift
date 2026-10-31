@@ -12,6 +12,7 @@ public actor HAPBridge {
     private var accessories: [UInt64: HAPAccessory] = [:]
     private var nextAID: UInt64 = 2
     private var writeHandlers: [String: @Sendable (HAPCharacteristicValue) async throws -> Void] = [:]
+    private var writeResponseHandlers: [String: WriteResponseHandler] = [:]
     private var resourceHandlers: [UInt64: ResourceHandler] = [:]
     public let category: HAPCategory
 
@@ -150,8 +151,9 @@ public actor HAPBridge {
                 ))
                 nextIID += 1
             }
-            added.append(HAPService(iid: serviceIID, type: service.type, characteristics: chars))
+            added.append(HAPService(iid: serviceIID, type: service.type, characteristics: chars, linked: service.linked))
         }
+        added = Self.resolvingLinks(added)
         primary.services += added
         accessories[1] = primary
         return added
@@ -223,8 +225,9 @@ public actor HAPBridge {
                 ))
                 nextIID += 1
             }
-            allServices.append(HAPService(iid: serviceIID, type: service.type, characteristics: updatedChars))
+            allServices.append(HAPService(iid: serviceIID, type: service.type, characteristics: updatedChars, linked: service.linked))
         }
+        allServices = [infoService] + Self.resolvingLinks(Array(allServices.dropFirst()))
 
         let accessory = HAPAccessory(aid: aid, services: allServices)
         accessories[aid] = accessory
@@ -232,6 +235,15 @@ public actor HAPBridge {
         await incrementAndNotify()
 
         return aid
+    }
+
+    /// Turns `linked` from positions in `services` into the IIDs of those services.
+    private static func resolvingLinks(_ services: [HAPService]) -> [HAPService] {
+        services.map { service in
+            var service = service
+            service.linked = service.linked.compactMap { services.indices.contains(Int($0)) ? services[Int($0)].iid : nil }
+            return service
+        }
     }
 
     /// Remove an accessory from the bridge.
@@ -246,6 +258,7 @@ public actor HAPBridge {
         // Clean up write handlers for this accessory
         let aidPrefix = "\(aid)."
         writeHandlers = writeHandlers.filter { !$0.key.hasPrefix(aidPrefix) }
+        writeResponseHandlers = writeResponseHandlers.filter { !$0.key.hasPrefix(aidPrefix) }
         resourceHandlers[aid] = nil
 
         // Clean up event subscriptions for this accessory
@@ -272,7 +285,11 @@ public actor HAPBridge {
         return nil
     }
 
-    public func writeCharacteristic(aid: UInt64, iid: UInt64, value: HAPCharacteristicValue) async throws {
+    /// Stores the value and runs the write handler. Returns the value of a write-response
+    /// handler, for writes the controller sent with `"r": true`.
+    @discardableResult
+    public func writeCharacteristic(aid: UInt64, iid: UInt64, value: HAPCharacteristicValue,
+                                    connectionID: Int = 0) async throws -> HAPCharacteristicValue? {
         guard var accessory = accessories[aid] else {
             throw HAPError.notFound
         }
@@ -302,6 +319,10 @@ public actor HAPBridge {
         if let handler = writeHandlers[key] {
             try await handler(value)
         }
+        if let handler = writeResponseHandlers[key] {
+            return try await handler(value, connectionID)
+        }
+        return nil
     }
 
     // MARK: - Write Handlers
@@ -312,6 +333,14 @@ public actor HAPBridge {
         handler: @escaping @Sendable (HAPCharacteristicValue) async throws -> Void
     ) {
         writeHandlers[Self.handlerKey(aid: aid, iid: iid)] = handler
+    }
+
+    /// Handles a write whose response carries a value (`wr` permission), such as
+    /// SetupDataStreamTransport. Gets the ID of the connection that wrote.
+    public typealias WriteResponseHandler = @Sendable (_ value: HAPCharacteristicValue, _ connectionID: Int) async throws -> HAPCharacteristicValue
+
+    public func registerWriteResponseHandler(aid: UInt64, iid: UInt64, handler: @escaping WriteResponseHandler) {
+        writeResponseHandlers[Self.handlerKey(aid: aid, iid: iid)] = handler
     }
 
     // MARK: - Resources (camera snapshots)
@@ -368,6 +397,19 @@ public actor HAPBridge {
     }
 
     /// Remove all subscriptions for a disconnected connection.
+    // MARK: - Session secrets (HomeKit Data Stream)
+
+    /// Pair-verify shared secret of each verified connection.
+    private var sessionSecrets: [Int: Data] = [:]
+
+    public func setSessionSecret(_ secret: Data?, connectionID: Int) {
+        sessionSecrets[connectionID] = secret
+    }
+
+    public func sessionSecret(connectionID: Int) -> Data? {
+        sessionSecrets[connectionID]
+    }
+
     public func unsubscribeAll(connectionID: Int) {
         for key in subscriptions.keys {
             subscriptions[key]?.remove(connectionID)

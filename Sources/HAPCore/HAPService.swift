@@ -8,11 +8,15 @@ public struct HAPService: Sendable {
     public var iid: UInt64
     public let type: HAPServiceType
     public var characteristics: [HAPCharacteristic]
+    /// Services this one links to. Passed to `HAPBridge.addAccessory` as positions in
+    /// its `services` array; stored by the bridge as the linked services' IIDs.
+    public var linked: [UInt64]
 
-    public init(iid: UInt64 = 0, type: HAPServiceType, characteristics: [HAPCharacteristic]) {
+    public init(iid: UInt64 = 0, type: HAPServiceType, characteristics: [HAPCharacteristic], linked: [UInt64] = []) {
         self.iid = iid
         self.type = type
         self.characteristics = characteristics
+        self.linked = linked
     }
 }
 
