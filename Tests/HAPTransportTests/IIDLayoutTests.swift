@@ -314,4 +314,25 @@ struct IIDLayoutTests {
         #expect(jsonServiceIIDs.sorted() == bridgeServiceIIDs.sorted().map(Int.init))
         #expect(jsonCharIIDs.sorted() == bridgeCharIIDs.sorted().map(Int.init))
     }
+
+    // MARK: - ConfiguredName
+
+    @Test("configured name takes the last IID and leaves the others in place")
+    func configuredNameIsLast() async {
+        let bridge = makeBridge()
+        let services = [HAPService.switch(startIID: 0)]
+        let plain = AccessoryInfo(name: "Cam", manufacturer: "M", model: "X", serialNumber: "1", firmwareRevision: "1")
+        let named = AccessoryInfo(name: "Cam", manufacturer: "M", model: "X", serialNumber: "1", firmwareRevision: "1",
+                                  configuredName: "Cam")
+        await bridge.addAccessory(info: plain, services: services, aid: 2)
+        await bridge.addAccessory(info: named, services: services, aid: 3)
+        let db = await bridge.accessoryDatabase()
+        let before = db.first { $0.aid == 2 }!.services
+        let after = db.first { $0.aid == 3 }!.services
+        let iids = { (s: [HAPService]) in s.flatMap { [$0.iid] + $0.characteristics.map(\.iid) } }
+        let name = after[0].characteristics.first { $0.type == .configuredName }
+        #expect(name?.value == .string("Cam"))
+        #expect(name?.iid == (iids(before).max() ?? 0) + 1)
+        #expect(iids(after).filter { $0 != name?.iid } == iids(before))
+    }
 }
