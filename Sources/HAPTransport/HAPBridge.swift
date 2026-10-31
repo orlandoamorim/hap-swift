@@ -228,6 +228,13 @@ public actor HAPBridge {
             allServices.append(HAPService(iid: serviceIID, type: service.type, characteristics: updatedChars, linked: service.linked))
         }
         allServices = [infoService] + Self.resolvingLinks(Array(allServices.dropFirst()))
+        // Last IID, so adding it later doesn't move the IIDs the Home app already knows.
+        if let configuredName = info.configuredName {
+            allServices[0].characteristics.append(HAPCharacteristic(
+                iid: nextIID, type: .configuredName, value: .string(configuredName),
+                permissions: [.read, .write, .notify], format: .string
+            ))
+        }
 
         let accessory = HAPAccessory(aid: aid, services: allServices)
         accessories[aid] = accessory

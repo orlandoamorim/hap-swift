@@ -23,6 +23,8 @@ extension HAPCharacteristicType {
     public static let model = HAPCharacteristicType(rawValue: "21")
     public static let serialNumber = HAPCharacteristicType(rawValue: "30")
     public static let firmwareRevision = HAPCharacteristicType(rawValue: "52")
+    /// The name the Home app shows and writes when the user renames the accessory or service.
+    public static let configuredName = HAPCharacteristicType(rawValue: "E3")
     public static let identify = HAPCharacteristicType(rawValue: "14")
 }
 
