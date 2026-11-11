@@ -115,6 +115,28 @@ struct HAPBridgeTests {
         #expect(written == .uint8(1))
     }
 
+    @Test("a numeric write to a bool characteristic reaches the handler as bool")
+    func numericWriteToBool() async throws {
+        let bridge = makeBridge()
+        let aid = await bridge.addAccessory(
+            info: AccessoryInfo(name: "Switch", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+            services: [.switch(startIID: 0)]
+        )
+        let db = await bridge.accessoryDatabase()
+        let iid = db.first { $0.aid == aid }!.services.flatMap(\.characteristics).first { $0.type == .on }!.iid
+        let received = Received()
+        await bridge.registerWriteHandler(aid: aid, iid: iid) { value in await received.set(value) }
+
+        try await bridge.writeCharacteristic(aid: aid, iid: iid, value: .uint8(1))
+        #expect(await received.value == .bool(true))
+        #expect(await bridge.readCharacteristic(aid: aid, iid: iid) == .bool(true))
+    }
+
+    private actor Received {
+        var value: HAPCharacteristicValue?
+        func set(_ value: HAPCharacteristicValue) { self.value = value }
+    }
+
     @Test("resource handler serves snapshots per accessory and is removed with it")
     func resourceHandler() async throws {
         let bridge = makeBridge()

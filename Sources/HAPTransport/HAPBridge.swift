@@ -301,6 +301,7 @@ public actor HAPBridge {
             throw HAPError.notFound
         }
 
+        var value = value
         var found = false
         for serviceIndex in 0 ..< accessory.services.count {
             for charIndex in 0 ..< accessory.services[serviceIndex].characteristics.count {
@@ -309,6 +310,8 @@ public actor HAPBridge {
                         throw HAPError.readOnly
                     }
                     let char = accessory.services[serviceIndex].characteristics[charIndex]
+                    // JSON can't tell the handler which type the controller meant (`1` vs `true`).
+                    value = value.converted(to: char.format)
                     accessory.services[serviceIndex].characteristics[charIndex].value = value.clamped(
                         minValue: char.minValue, maxValue: char.maxValue
                     )

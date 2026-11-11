@@ -41,6 +41,44 @@ public enum HAPCharacteristicValue: Sendable, Equatable {
         }
     }
 
+    /// Converts between bool and numeric values to match `format`: the Home app writes
+    /// `1`/`0` to bool characteristics (e.g. tapping a tile), and `true`/`false` to
+    /// some numeric ones. Other values are returned unchanged.
+    public func converted(to format: HAPFormat) -> HAPCharacteristicValue {
+        switch (self, format) {
+        case (.bool, .bool): return self
+        case (_, .bool): return number.map { .bool($0 != 0) } ?? self
+        case (.bool(let b), _): return Self.numeric(b ? 1 : 0, format: format) ?? self
+        case (.float(let v), .float): return .float(v)
+        case (_, .float): return number.map { .float($0) } ?? self
+        default:
+            guard self.format != format, let n = number, n == n.rounded() else { return self }
+            return Self.numeric(n, format: format) ?? self
+        }
+    }
+
+    private var number: Double? {
+        switch self {
+        case .uint8(let v): Double(v)
+        case .uint16(let v): Double(v)
+        case .uint32(let v): Double(v)
+        case .int32(let v): Double(v)
+        case .float(let v): v
+        default: nil
+        }
+    }
+
+    private static func numeric(_ n: Double, format: HAPFormat) -> HAPCharacteristicValue? {
+        switch format {
+        case .uint8: UInt8(exactly: n).map { .uint8($0) }
+        case .uint16: UInt16(exactly: n).map { .uint16($0) }
+        case .uint32: UInt32(exactly: n).map { .uint32($0) }
+        case .int: Int32(exactly: n).map { .int32($0) }
+        case .float: .float(n)
+        default: nil
+        }
+    }
+
     public var format: HAPFormat {
         switch self {
         case .bool: .bool
