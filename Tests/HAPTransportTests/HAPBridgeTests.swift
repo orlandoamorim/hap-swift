@@ -180,6 +180,20 @@ struct HAPBridgeTests {
         #expect(services[2].linked.isEmpty)
     }
 
+    @Test("the primary flag is kept on the stored service")
+    func primaryFlag() async {
+        let bridge = makeBridge()
+        var main = HAPService.switch(startIID: 0)
+        main.primary = true
+        let aid = await bridge.addAccessory(
+            info: AccessoryInfo(name: "AC", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+            services: [main]
+        )
+        let services = await bridge.accessoryDatabase().first { $0.aid == aid }!.services
+        #expect(services[0].primary == false)
+        #expect(services[1].primary == true)
+    }
+
     @Test("write-response handler answers with a value and the writing connection")
     func writeResponse() async throws {
         let bridge = makeBridge()
