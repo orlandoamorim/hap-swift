@@ -340,7 +340,6 @@ public struct CharacteristicProtocol: Sendable {
                     "characteristics": charList,
                 ]
                 if !service.linked.isEmpty { serviceDict["linked"] = service.linked }
-                if service.primary { serviceDict["primary"] = true }
                 serviceList.append(serviceDict)
             }
 

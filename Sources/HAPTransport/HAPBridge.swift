@@ -151,8 +151,7 @@ public actor HAPBridge {
                 ))
                 nextIID += 1
             }
-            added.append(HAPService(iid: serviceIID, type: service.type, characteristics: chars, linked: service.linked,
-                                    primary: service.primary))
+            added.append(HAPService(iid: serviceIID, type: service.type, characteristics: chars, linked: service.linked))
         }
         added = Self.resolvingLinks(added)
         primary.services += added
@@ -226,8 +225,7 @@ public actor HAPBridge {
                 ))
                 nextIID += 1
             }
-            allServices.append(HAPService(iid: serviceIID, type: service.type, characteristics: updatedChars, linked: service.linked,
-                                    primary: service.primary))
+            allServices.append(HAPService(iid: serviceIID, type: service.type, characteristics: updatedChars, linked: service.linked))
         }
         allServices = [infoService] + Self.resolvingLinks(Array(allServices.dropFirst()))
         // Last IID, so adding it later doesn't move the IIDs the Home app already knows.

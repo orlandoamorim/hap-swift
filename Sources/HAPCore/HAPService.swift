@@ -11,16 +11,12 @@ public struct HAPService: Sendable {
     /// Services this one links to. Passed to `HAPBridge.addAccessory` as positions in
     /// its `services` array; stored by the bridge as the linked services' IIDs.
     public var linked: [UInt64]
-    /// The accessory's main service: the Home app uses it for the tile and its tap action.
-    public var primary: Bool
 
-    public init(iid: UInt64 = 0, type: HAPServiceType, characteristics: [HAPCharacteristic], linked: [UInt64] = [],
-                primary: Bool = false) {
+    public init(iid: UInt64 = 0, type: HAPServiceType, characteristics: [HAPCharacteristic], linked: [UInt64] = []) {
         self.iid = iid
         self.type = type
         self.characteristics = characteristics
         self.linked = linked
-        self.primary = primary
     }
 }
 
