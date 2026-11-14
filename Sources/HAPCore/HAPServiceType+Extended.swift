@@ -46,3 +46,12 @@ extension HAPServiceType {
     public static let cameraOperatingMode = HAPServiceType(rawValue: "21A")
     public static let dataStreamTransportManagement = HAPServiceType(rawValue: "129")
 }
+
+// MARK: - Television
+
+extension HAPServiceType {
+    public static let television = HAPServiceType(rawValue: "D8")
+    public static let inputSource = HAPServiceType(rawValue: "D9")
+    /// A television's speaker is the Speaker service (113) with the volume characteristics.
+    public static let televisionSpeaker = HAPServiceType.speaker
+}

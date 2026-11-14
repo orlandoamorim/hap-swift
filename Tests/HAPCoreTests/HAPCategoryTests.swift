@@ -13,5 +13,8 @@ struct HAPCategoryTests {
         #expect(HAPCategory.bridge.rawValue == 2)
         #expect(HAPCategory.garageDoorOpener.rawValue == 4)
         #expect(HAPCategory.securitySystem.rawValue == 11)
+        #expect(HAPCategory.television.rawValue == 31)
+        #expect(HAPCategory.setTopBox.rawValue == 35)
+        #expect(HAPCategory.streamingStick.rawValue == 36)
     }
 }
