@@ -53,25 +53,24 @@ private actor HAPConnectionContext {
 
     // MARK: - Outgoing encryption (for event notifications)
 
-    /// Encrypt an outgoing EVENT payload using this connection's session keys.
-    /// Returns nil if the session is not yet encrypted (pre-pair-verify).
-    func encryptOutgoing(_ data: Data, logger: Logger, connectionID: Int) async -> Data? {
-        guard await session.isEncrypted else { return nil }
+    /// Encrypts an outgoing EVENT payload with this connection's session keys and sends it.
+    /// Does nothing before pair-verify.
+    func sendEncrypted(_ data: Data, send: @Sendable (Data) -> Void, logger: Logger, connectionID: Int) async {
+        guard await session.isEncrypted else { return }
         do {
-            return try await session.encrypt(data)
+            try await session.encrypt(data, send: send)
         } catch {
             logger.debug("Connection \(connectionID): event encryption failed: \(error)")
-            return nil
         }
     }
 
     // MARK: - Data processing
 
     /// Append newly-received bytes to the buffer and process as many complete
-    /// frames as possible.  Returns a list of raw byte blobs to send back.
-    func process(incoming data: Data, logger: Logger, connectionID: Int) async -> [Data] {
+    /// frames as possible, sending each response through `send`. Encrypted responses
+    /// are sent as they are encrypted, so they can't overtake or be overtaken by events.
+    func process(incoming data: Data, send: @Sendable (Data) -> Void, logger: Logger, connectionID: Int) async {
         buffer.append(data)
-        var outgoing: [Data] = []
 
         while !buffer.isEmpty {
             if await session.isEncrypted {
@@ -113,8 +112,7 @@ private actor HAPConnectionContext {
 
                 let responseData = HTTPProtocol.serializeResponse(response)
                 do {
-                    let encrypted = try await session.encrypt(responseData)
-                    outgoing.append(encrypted)
+                    try await session.encrypt(responseData, send: send)
                 } catch {
                     logger.error("Connection \(connectionID): response encryption failed: \(error)")
                 }
@@ -139,8 +137,7 @@ private actor HAPConnectionContext {
                     response = HTTPProtocol.errorResponse(status: 500, message: "Internal Server Error")
                 }
 
-                let responseData = HTTPProtocol.serializeResponse(response)
-                outgoing.append(responseData)
+                send(HTTPProtocol.serializeResponse(response))
 
                 // If pair-verify just completed (M4 sent), promote this connection
                 // to encrypted mode.  All subsequent data from iOS will be encrypted.
@@ -151,8 +148,6 @@ private actor HAPConnectionContext {
                 }
             }
         }
-
-        return outgoing
     }
 }
 
@@ -324,33 +319,36 @@ public final class AppleTCPServer: HAPServer, @unchecked Sendable {
     private func receiveData(connection: NWConnection, connectionID: Int) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] content, _, isComplete, error in
             guard let self else { return }
-
-            if let data = content, !data.isEmpty {
-                Task {
+            // One chunk at a time: the next receive starts after this one is processed, so
+            // requests are handled (and answered) in the order they arrived. Chunks handed to
+            // separate tasks could run out of order and break the frame counters.
+            Task {
+                if let data = content, !data.isEmpty {
                     await self.processData(data: data, connection: connection, connectionID: connectionID)
                 }
-            }
-
-            if isComplete {
-                self.removeConnection(connectionID)
-            } else if let error {
-                self.logger.debug("Connection \(connectionID) receive error: \(error)")
-                self.removeConnection(connectionID)
-            } else {
-                self.receiveData(connection: connection, connectionID: connectionID)
+                if isComplete {
+                    self.removeConnection(connectionID)
+                } else if let error {
+                    self.logger.debug("Connection \(connectionID) receive error: \(error)")
+                    self.removeConnection(connectionID)
+                } else {
+                    self.receiveData(connection: connection, connectionID: connectionID)
+                }
             }
         }
     }
 
     private func processData(data: Data, connection: NWConnection, connectionID: Int) async {
         guard let context = lock.withLock({ contexts[connectionID] }) else { return }
+        await context.process(incoming: data, send: send(on: connection, connectionID: connectionID),
+                              logger: logger, connectionID: connectionID)
+    }
 
-        let responses = await context.process(incoming: data, logger: logger, connectionID: connectionID)
-        for responseData in responses {
-            connection.send(content: responseData, completion: .contentProcessed { [weak self] error in
-                if let error {
-                    self?.logger.debug("Connection \(connectionID) send error: \(error)")
-                }
+    private func send(on connection: NWConnection, connectionID: Int) -> @Sendable (Data) -> Void {
+        let logger = logger
+        return { data in
+            connection.send(content: data, completion: .contentProcessed { error in
+                if let error { logger.debug("Connection \(connectionID) send error: \(error)") }
             })
         }
     }
@@ -379,14 +377,8 @@ public final class AppleTCPServer: HAPServer, @unchecked Sendable {
         }
         guard let context, let connection else { return }
 
-        let encrypted = await context.encryptOutgoing(eventData, logger: logger, connectionID: connectionID)
-        guard let encrypted else { return }
-
-        connection.send(content: encrypted, completion: .contentProcessed { [weak self] error in
-            if let error {
-                self?.logger.debug("Connection \(connectionID) event send error: \(error)")
-            }
-        })
+        await context.sendEncrypted(eventData, send: send(on: connection, connectionID: connectionID),
+                                    logger: logger, connectionID: connectionID)
     }
 }
 #endif
