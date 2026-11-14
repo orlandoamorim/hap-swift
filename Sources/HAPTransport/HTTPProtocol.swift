@@ -103,6 +103,27 @@ public enum HTTPProtocol {
         return HTTPRequest(method: method, path: path, headers: headers, body: body)
     }
 
+    /// Byte length of the first complete request in `data` (headers plus `Content-Length`
+    /// body), or nil while it is still incomplete. HAP splits a request larger than 1024
+    /// bytes over several encrypted frames, so the plaintext has to be joined first.
+    public static func requestLength(in data: Data) -> Int? {
+        let crlfcrlf = Data([0x0D, 0x0A, 0x0D, 0x0A])
+        guard let separatorRange = data.range(of: crlfcrlf) else { return nil }
+        let headerLength = separatorRange.upperBound - data.startIndex
+        guard let headerString = String(data: data[data.startIndex ..< separatorRange.lowerBound], encoding: .utf8) else {
+            return nil
+        }
+        var contentLength = 0
+        for line in headerString.components(separatedBy: "\r\n").dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            if line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
+                contentLength = Int(line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+        }
+        let total = headerLength + contentLength
+        return data.count >= total ? total : nil
+    }
+
     // MARK: - Serialize Response
 
     public static func serializeResponse(_ response: HTTPResponse) -> Data {

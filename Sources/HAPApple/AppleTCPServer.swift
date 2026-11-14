@@ -17,6 +17,8 @@ import HAPTransport
 /// transition happens atomically with respect to incoming data.
 private actor HAPConnectionContext {
     var buffer = Data()
+    /// Decrypted bytes not yet forming a whole request (a request can span frames).
+    var plaintextBuffer = Data()
     let session = HAPSession()
     let charProtocol: CharacteristicProtocol
     let pairVerifyStateMachine: PairVerifyStateMachine
@@ -97,24 +99,38 @@ private actor HAPConnectionContext {
                 buffer.removeFirst(consumed)
                 logger.debug("Connection \(connectionID): decrypted \(plaintext.count) bytes (\(consumed) bytes consumed)")
 
-                guard let request = HTTPProtocol.parseRequest(from: plaintext) else {
-                    logger.debug("Connection \(connectionID): failed to parse decrypted request (\(plaintext.count) bytes plaintext)")
-                    break
-                }
+                // A request larger than one frame (1024 bytes) arrives over several frames:
+                // join them and answer each request once it is complete.
+                plaintextBuffer.append(plaintext)
+                while let length = HTTPProtocol.requestLength(in: plaintextBuffer) {
+                    let requestData = Data(plaintextBuffer.prefix(length))
+                    plaintextBuffer.removeFirst(length)
+                    guard let request = HTTPProtocol.parseRequest(from: requestData) else {
+                        logger.debug("Connection \(connectionID): failed to parse decrypted request (\(requestData.count) bytes plaintext)")
+                        continue
+                    }
 
-                let response: HTTPResponse
-                do {
-                    response = try await charProtocol.handleRequest(request)
-                } catch {
-                    logger.error("Connection \(connectionID): request handler error: \(error)")
-                    response = HTTPProtocol.errorResponse(status: 500, message: "Internal Server Error")
-                }
+                    let response: HTTPResponse
+                    do {
+                        response = try await charProtocol.handleRequest(request)
+                    } catch {
+                        logger.error("Connection \(connectionID): request handler error: \(error)")
+                        response = HTTPProtocol.errorResponse(status: 500, message: "Internal Server Error")
+                    }
 
-                let responseData = HTTPProtocol.serializeResponse(response)
-                do {
-                    try await session.encrypt(responseData, send: send)
-                } catch {
-                    logger.error("Connection \(connectionID): response encryption failed: \(error)")
+                    let responseData = HTTPProtocol.serializeResponse(response)
+                    do {
+                        try await session.encrypt(responseData, send: send)
+                    } catch {
+                        logger.error("Connection \(connectionID): response encryption failed: \(error)")
+                    }
+                }
+                if !plaintextBuffer.isEmpty {
+                    logger.trace("Connection \(connectionID): partial request (\(plaintextBuffer.count) bytes), waiting for the next frame")
+                }
+                if plaintextBuffer.count > 1 << 20 {
+                    logger.error("Connection \(connectionID): dropping \(plaintextBuffer.count) bytes that never formed a request")
+                    plaintextBuffer.removeAll()
                 }
 
             } else {
