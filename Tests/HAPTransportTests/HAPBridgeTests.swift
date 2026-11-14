@@ -166,6 +166,32 @@ struct HAPBridgeTests {
         #expect(await bridge.category == .ipCamera)
     }
 
+    @Test("set primary services keeps their IIDs, replaces the old ones and bumps c#")
+    func setPrimaryServices() async throws {
+        let bridge = HAPBridge(info: AccessoryInfo(name: "TV", manufacturer: "m", model: "m", serialNumber: "s", firmwareRevision: "1"),
+                               category: .television)
+        let tv = HAPService(iid: 20, type: .television, characteristics: [
+            HAPCharacteristic(iid: 21, type: .active, value: .uint8(0), permissions: [.read, .write, .notify], format: .uint8),
+        ], linked: [40])
+        let input = HAPService(iid: 40, type: .inputSource, characteristics: [
+            HAPCharacteristic(iid: 41, type: .identifier, value: .uint32(1), permissions: [.read], format: .uint32),
+        ])
+        let before = await bridge.currentConfigurationNumber
+        await bridge.setPrimaryServices([tv, input])
+        await bridge.registerWriteHandler(aid: 1, iid: 21) { _ in }
+        var services = await bridge.accessoryDatabase()[0].services
+        #expect(services.map(\.iid) == [1, 8, 20, 40])
+        #expect(services[2].linked == [40])
+        #expect(await bridge.currentConfigurationNumber == before + 1)
+
+        await bridge.setPrimaryServices([tv])
+        services = await bridge.accessoryDatabase()[0].services
+        #expect(services.map(\.iid) == [1, 8, 20])
+        try await bridge.writeCharacteristic(aid: 1, iid: 21, value: .uint8(1))
+        #expect(await bridge.readCharacteristic(aid: 1, iid: 21) == .uint8(1))
+        #expect(await bridge.readCharacteristic(aid: 1, iid: 41) == nil)
+    }
+
     @Test("linked services are given as positions and stored as IIDs")
     func linkedServices() async {
         let bridge = makeBridge()

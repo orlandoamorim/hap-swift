@@ -164,4 +164,26 @@ struct HTTPProtocolTests {
         #expect(response.statusCode == 404)
         #expect(response.body.isEmpty)
     }
+
+    @Test("request length waits for a body split over frames")
+    func requestLengthAcrossFrames() {
+        let body = String(repeating: "x", count: 1500)
+        let raw = Data("PUT /characteristics HTTP/1.1\r\nContent-Length: \(body.count)\r\n\r\n\(body)".utf8)
+        // HAP frames carry at most 1024 bytes of plaintext.
+        let first = raw.prefix(1024)
+        #expect(HTTPProtocol.requestLength(in: Data(first)) == nil)
+        #expect(HTTPProtocol.parseRequest(from: Data(first)) == nil)
+        #expect(HTTPProtocol.requestLength(in: raw) == raw.count)
+        #expect(HTTPProtocol.parseRequest(from: raw)?.body.count == 1500)
+    }
+
+    @Test("request length splits back-to-back requests")
+    func requestLengthOfPipelinedRequests() {
+        let a = "PUT /characteristics HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}"
+        let b = "GET /accessories HTTP/1.1\r\n\r\n"
+        let data = Data((a + b).utf8)
+        #expect(HTTPProtocol.requestLength(in: data) == a.utf8.count)
+        #expect(HTTPProtocol.requestLength(in: Data(b.utf8)) == b.utf8.count)
+        #expect(HTTPProtocol.requestLength(in: Data("GET /accessories HTTP/1.1\r\n".utf8)) == nil)
+    }
 }

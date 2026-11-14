@@ -69,6 +69,24 @@ extension HAPCharacteristicType {
     public static let volume = HAPCharacteristicType(rawValue: "119")
 }
 
+// MARK: - Television
+
+extension HAPCharacteristicType {
+    public static let activeIdentifier = HAPCharacteristicType(rawValue: "E7")
+    public static let sleepDiscoveryMode = HAPCharacteristicType(rawValue: "E8")
+    public static let remoteKey = HAPCharacteristicType(rawValue: "E1")
+    public static let powerModeSelection = HAPCharacteristicType(rawValue: "DF")
+    public static let identifier = HAPCharacteristicType(rawValue: "E6")
+    public static let inputSourceType = HAPCharacteristicType(rawValue: "DB")
+    public static let inputDeviceType = HAPCharacteristicType(rawValue: "DC")
+    public static let isConfigured = HAPCharacteristicType(rawValue: "D6")
+    public static let currentVisibilityState = HAPCharacteristicType(rawValue: "135")
+    public static let targetVisibilityState = HAPCharacteristicType(rawValue: "134")
+    public static let displayOrder = HAPCharacteristicType(rawValue: "136")
+    public static let volumeControlType = HAPCharacteristicType(rawValue: "E9")
+    public static let volumeSelector = HAPCharacteristicType(rawValue: "EA")
+}
+
 // MARK: - Camera
 
 extension HAPCharacteristicType {

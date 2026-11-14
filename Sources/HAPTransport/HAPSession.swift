@@ -48,6 +48,12 @@ public actor HAPSession {
         return frames
     }
 
+    /// Encrypts and hands the frames to `send` before any other call can take the next
+    /// counters, so that responses and events reach the wire in counter order.
+    public func encrypt(_ plaintext: Data, send: @Sendable (Data) -> Void) throws {
+        send(try encrypt(plaintext))
+    }
+
     static let maxFrameLength = 1024
 
     private func encryptFrame(_ plaintext: Data) throws -> Data {

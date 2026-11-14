@@ -159,6 +159,22 @@ public actor HAPBridge {
         return added
     }
 
+    /// Replaces the services added after Accessory Information and Protocol Information
+    /// on AID 1, for a standalone accessory whose services change while it runs (a
+    /// television's inputs). The services keep the IIDs they carry, and `linked` holds
+    /// IIDs, so the caller keeps every IID stable. Bumps the configuration number.
+    public func setPrimaryServices(_ services: [HAPService]) async {
+        guard var primary = accessories[1] else { return }
+        let fixed = primary.services.filter { $0.type == .accessoryInformation || $0.type == .protocolInformation }
+        primary.services = fixed + services
+        accessories[1] = primary
+        let kept = Set(primary.services.flatMap { $0.characteristics.map { Self.handlerKey(aid: 1, iid: $0.iid) } })
+        writeHandlers = writeHandlers.filter { !$0.key.hasPrefix("1.") || kept.contains($0.key) }
+        writeResponseHandlers = writeResponseHandlers.filter { !$0.key.hasPrefix("1.") || kept.contains($0.key) }
+        subscriptions = subscriptions.filter { !$0.key.hasPrefix("1.") || kept.contains($0.key) }
+        await incrementAndNotify()
+    }
+
     // MARK: - Accessory Management
 
     /// Add an accessory to the bridge.
