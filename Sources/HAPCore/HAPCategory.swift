@@ -16,4 +16,7 @@ public enum HAPCategory: UInt8, Sendable {
     case programmableSwitch = 15
     case ipCamera = 17
     case speaker = 26
+    case television = 31
+    case setTopBox = 35
+    case streamingStick = 36
 }
